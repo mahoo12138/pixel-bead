@@ -1,0 +1,10 @@
+{
+  "type": "minecraft:block",
+  "pools": [
+    {
+      "rolls": 1,
+      "entries": [ { "type": "minecraft:item", "name": "pixelbead:dye_workbench" } ],
+      "condition": { "type": "minecraft:survives_explosion" }
+    }
+  ]
+}

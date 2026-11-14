@@ -1,0 +1,31 @@
+modLoader="kotlinforforge"
+loaderVersion="[6,)"
+license="MIT"
+
+[[mods]]
+modId="pixelbead"
+version="0.1.0"
+displayName="Pixel Bead"
+authors="Pixel Bead Team"
+description='''291 MARD solid-color bead blocks, a dye workbench, and a server-authoritative bead building mode.'''
+
+[[dependencies.pixelbead]]
+modId="neoforge"
+type="required"
+versionRange="[26.3.0.99,)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.pixelbead]]
+modId="minecraft"
+type="required"
+versionRange="[26.3,26.4)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.pixelbead]]
+modId="kotlinforforge"
+type="required"
+versionRange="[6,)"
+ordering="NONE"
+side="BOTH"
