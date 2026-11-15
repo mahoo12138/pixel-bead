@@ -156,15 +156,24 @@ either **side** (a single column of 18, flush with that edge and vertically cent
 is too short for 305px it falls back to two columns of 9). The setting is
 `ClientConfig.hudPosition` (`hud.position` in `pixelbead-client.toml`) and is edited on a
 vanilla-styled settings screen (`PixelBeadOptionsScreen`: `OptionsSubScreen` + `OptionsList` +
-`CycleButton`), reachable from the **Settings** button in the picker's top-right corner and from
-**Mods → Pixel Bead → Config**. The picker's own mirrored bar always stays at the bottom: it is
-the editing surface.
+`CycleButton`), reachable from the **Settings** button in the picker's top-right corner (same row and
+same height as the search box, `SEARCH_Y`/`SEARCH_H`/`SEARCH_W` are shared constants so the two can
+never drift apart) and from **Mods → Pixel Bead → Config**. The picker's own mirrored bar always
+stays at the bottom: it is the editing surface.
 Swatches come in three sizes — **small** (12px), **medium** (16px, the default) and **large**
 (20px) — set by `ClientConfig.hudSwatchSize` (`hud.swatch_size`). The 1px channel between swatches
 is constant, so every step still reads as one tight color strip, and the picker's mirrored bar
 uses the same size as the HUD.
 While the picker or the settings screen is open the in-game HUD is hidden and the two surfaces are
 fully independent: there is no shared preview state or HUD/picker linkage to keep in sync.
+
+**First join (2026-11-15):** the first time a player joins a world, `WelcomeMessage` posts two chat
+lines — a greeting and a hint that renders the *actual* bound keys through `Component.keybind`
+(`key.pixelbead.toggle_mode` / `key.pixelbead.open_picker`), so rebinding never makes the text lie.
+The "already greeted" flag is its own attachment (`BeadModeAttachments.WELCOMED`: a `Boolean` with
+`copyOnDeath`, never synced) rather than a field of `BeadModeState`, because that state is
+deliberately not copied on death — otherwise dying and relogging would replay the greeting.
+It is skipped (and not consumed) when the server config disables the feature.
 
 ## Color data license
 

@@ -59,7 +59,10 @@ class ColorPickerScreen : Screen(Component.translatable("gui.pixelbead.picker"))
             }
             initialized = true
         }
-        search = EditBox(font, width / 2 - 80, 20, 160, 18, Component.translatable("gui.pixelbead.search"))
+        search = EditBox(
+            font, width / 2 - SEARCH_W / 2, SEARCH_Y, SEARCH_W, SEARCH_H,
+            Component.translatable("gui.pixelbead.search"),
+        )
         search.setResponder { }
         search.value = query
         addRenderableWidget(search)
@@ -68,7 +71,8 @@ class ColorPickerScreen : Screen(Component.translatable("gui.pixelbead.picker"))
                 val mc = Minecraft.getInstance()
                 mc.gui.setScreen(PixelBeadOptionsScreen(this, mc.options))
             }
-                .bounds(width - SETTINGS_BTN_W - 8, 4, SETTINGS_BTN_W, 20)
+                // Same row *and* same height as the search box, so the two read as one header line.
+                .bounds(width - SETTINGS_BTN_W - 8, SEARCH_Y, SETTINGS_BTN_W, SEARCH_H)
                 .build()
         )
     }
@@ -209,6 +213,11 @@ class ColorPickerScreen : Screen(Component.translatable("gui.pixelbead.picker"))
         const val CELL = 16
         const val GRID_X = 10
         const val GRID_Y = 64
+
+        /** Header row shared by the search box and the settings button. */
+        const val SEARCH_Y = 20
+        const val SEARCH_H = 18
+        const val SEARCH_W = 160
 
         /** Vanilla-looking "Settings" button in the top-right corner, opens PixelBeadOptionsScreen. */
         const val SETTINGS_BTN_W = 54

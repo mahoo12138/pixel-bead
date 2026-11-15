@@ -61,6 +61,11 @@ object BeadModeEvents {
 
     // ---- cleanup triggers ----
     @SubscribeEvent
+    fun onLoggedIn(e: PlayerEvent.PlayerLoggedInEvent) {
+        (e.entity as? ServerPlayer)?.let { WelcomeMessage.sendIfFirstTime(it) }
+    }
+
+    @SubscribeEvent
     fun onRespawn(e: PlayerEvent.PlayerRespawnEvent) {
         (e.entity as? ServerPlayer)?.let { BeadModeManager.forceExit(it) }
     }

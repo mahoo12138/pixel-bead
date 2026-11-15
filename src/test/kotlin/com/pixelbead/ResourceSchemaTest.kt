@@ -105,6 +105,8 @@ class ResourceSchemaTest {
         // BeadPlacement reports every rejection reason via HudMessage, and the picker/HUD
         // use these gui keys; a missing entry would show the raw key instead of text.
         val keys = listOf(
+            "message.pixelbead.welcome",
+            "message.pixelbead.welcome.hint",
             "message.pixelbead.insufficient",
             "message.pixelbead.denied",
             "message.pixelbead.no_color",

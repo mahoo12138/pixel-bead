@@ -458,6 +458,27 @@ OpenGL 3.3 NVIDIA 610.88），mod 列表含 Pixel Bead 0.1.0，输出
 - **验证**：`./gradlew build` → BUILD SUCCESSFUL（22 项测试全过）；`runClient` 冒烟 0 ERROR/FATAL。
 
 
+### 设置按钮对齐 + 首次进入世界欢迎语（2026-11-15，用户要求）
+- **右上角「设置」按钮**：原先 `y=4, h=20`，比标题/搜索框那一行高出一截。改为与搜索框
+  **同行同高**（`SEARCH_Y = 20`、`SEARCH_H = 18`、`SEARCH_W = 160`），搜索框与按钮共用这三个
+  常量，两者永远在同一条 header 线上；按钮宽仍 `SETTINGS_BTN_W = 54`，右距 8px。
+- **欢迎语**：`beadmode/WelcomeMessage.kt`，由 `BeadModeEvents.onLoggedIn`
+  （`PlayerEvent.PlayerLoggedInEvent`）触发，两条聊天消息：
+  「欢迎来到拼豆世界！」+「按 <B> 进入拼豆模式，按 <P> 打开颜色选择器」。
+  - 键位用 `Component.keybind("key.pixelbead.toggle_mode" / "key.pixelbead.open_picker")` 渲染，
+    玩家改过键位后文案自动跟着变，不硬编码 P/B。
+  - 一次性标记放**独立附件** `BeadModeAttachments.WELCOMED`
+    （`AttachmentType<Boolean>`，`Codec.BOOL.fieldOf("welcomed")` + `copyOnDeath()`，不同步给客户端）。
+    **不能塞进 `BeadModeState`**：那个附件按设计不带 `copyOnDeath`（死亡必须清模式），
+    放进去会导致「死一次再重登」又弹一遍欢迎语。
+  - `ServerConfig.enabled == false` 时直接返回，且不消费标记，之后开启仍会提示。
+  - lang 新增 `message.pixelbead.welcome` / `message.pixelbead.welcome.hint`（中英），
+    `ResourceSchemaTest` 的键清单同步。
+- **验证**：`./gradlew build` → BUILD SUCCESSFUL（22 项测试全过）；生成的
+  `build/generated/pixelbeadResources/assets/pixelbead/lang/{en_us,zh_cn}.json` 均含新键与 `%s`
+  占位；`runClient` 实测首次进入存档后聊天栏出现两条欢迎语，重进不再重复。
+
+
 **最终回归**：`./gradlew build` → `BUILD SUCCESSFUL`，
 `PaletteTest 7 + WorkbenchLogicTest 8 + ResourceSchemaTest 7 = 22` 项全通过，
 产物 `build/libs/pixel-bead-0.1.0.jar`。
