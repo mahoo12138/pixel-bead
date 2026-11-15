@@ -19,4 +19,10 @@ object BeadKeyMappings {
 
     val TOGGLE_MODE = KeyMapping("key.pixelbead.toggle_mode", InputConstants.Type.KEYBOARD, InputConstants.KEY_B, CATEGORY)
     val OPEN_PICKER = KeyMapping("key.pixelbead.open_picker", InputConstants.Type.KEYBOARD, InputConstants.KEY_P, CATEGORY)
+
+    /** Held modifier for the area tools (anchor/fill on right click, square break on left). */
+    val TOOL = KeyMapping("key.pixelbead.tool", InputConstants.Type.KEYBOARD, InputConstants.KEY_GRAVE, CATEGORY)
+
+    /** Undo the last bead-tool operation. */
+    val UNDO = KeyMapping("key.pixelbead.undo", InputConstants.Type.KEYBOARD, InputConstants.KEY_Z, CATEGORY)
 }

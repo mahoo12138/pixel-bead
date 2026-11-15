@@ -1,7 +1,9 @@
 package com.pixelbead.network
 
 import com.pixelbead.PixelBead
+import com.pixelbead.beadmode.AreaTools
 import com.pixelbead.beadmode.BeadModeManager
+import com.pixelbead.beadmode.ToolSessions
 import net.minecraft.server.level.ServerPlayer
 import net.neoforged.bus.api.SubscribeEvent
 import net.neoforged.fml.common.EventBusSubscriber
@@ -31,6 +33,20 @@ object BeadNetwork {
         reg.playToServer(SetHotbarColor.TYPE, SetHotbarColor.STREAM_CODEC) { payload, ctx ->
             ctx.enqueueWork {
                 (ctx.player() as? ServerPlayer)?.let { BeadModeManager.setHotbarColor(it, payload.slot, payload.colorId) }
+            }
+        }
+        // Tool key is a modifier, not an action: it only flips a flag in the server session.
+        // Positions still come from the vanilla interaction events, never from a payload.
+        reg.playToServer(ToolKey.TYPE, ToolKey.STREAM_CODEC) { payload, ctx ->
+            ctx.enqueueWork {
+                (ctx.player() as? ServerPlayer)?.let {
+                    ToolSessions.of(it).held = payload.held && !it.isSpectator
+                }
+            }
+        }
+        reg.playToServer(UndoRequest.TYPE, UndoRequest.STREAM_CODEC) { _, ctx ->
+            ctx.enqueueWork {
+                (ctx.player() as? ServerPlayer)?.let { AreaTools.undo(it) }
             }
         }
         // Declare the clientbound payload only; its handler is registered client-side

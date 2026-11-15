@@ -64,7 +64,7 @@ object PixelBeadClient {
     fun onClientPayloadHandlers(event: RegisterClientPayloadHandlersEvent) {
         // Clientbound handlers belong here in 26.3 (not in the common registrar),
         // so the dedicated server never even references a client-only class.
-        event.register(HudMessage.TYPE) { payload, _ -> BeadHudLayer.showToast(payload.key) }
+        event.register(HudMessage.TYPE) { payload, _ -> BeadHudLayer.showToast(payload.key, payload.arg, payload.arg2) }
     }
 
     @SubscribeEvent
@@ -72,6 +72,8 @@ object PixelBeadClient {
         event.registerCategory(BeadKeyMappings.CATEGORY)
         event.register(BeadKeyMappings.TOGGLE_MODE)
         event.register(BeadKeyMappings.OPEN_PICKER)
+        event.register(BeadKeyMappings.TOOL)
+        event.register(BeadKeyMappings.UNDO)
     }
 
     @SubscribeEvent

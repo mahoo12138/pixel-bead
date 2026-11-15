@@ -175,6 +175,35 @@ The "already greeted" flag is its own attachment (`BeadModeAttachments.WELCOMED`
 deliberately not copied on death — otherwise dying and relogging would replay the greeting.
 It is skipped (and not consumed) when the server config disables the feature.
 
+## Bead tools (2026-11-15)
+
+The efficiency layer on top of bead mode. Everything here is server-authoritative, sits behind
+`tool.enabled`, and only ever moves **bead** blocks in bulk:
+
+| Gesture | What happens |
+|---|---|
+| Hold RMB and sweep | **Stroke**: the cells the cursor skipped are filled with a Bresenham line, so dragging fast no longer leaves gaps. Bridged only within one face plane and `tool.max_stroke_gap` blocks; a pause (500 ms) or a face change breaks the stroke |
+| Plain LMB on a bead block | **Eraser**: that bead disappears instantly, and the sweep is interpolated exactly like the brush |
+| `~` + RMB | **Two-click fill**: the first click stores an anchor, the second fills the axis-aligned rectangle between the corners on that plane — hold sneak for a single line instead. Capped at `tool.max_area` (512) |
+| `~` + LMB | **Area break**: clears a `(2 * tool.break_radius + 1)²` square of bead blocks in the face plane |
+| `Z` | **Undo** the last stroke / fill / break (`tool.undo_steps`, default 8) |
+
+Why it is built like this:
+
+- **No coordinate payloads.** The anchor and the fill are two ordinary right clicks, so the server
+  derives both corners from events it already receives. Every filled cell runs through
+  `BeadPlacement.placeAt` → `ItemStack.useOn` → `EntityPlaceEvent`, so claim mods still veto cell by
+  cell. The only new client→server payload is a boolean for the tool key (the same trick VeinMiner
+  uses), plus a unit payload for undo.
+- **Bulk removal only touches bead blocks** — a stray tool click can never eat a build. Every break
+  goes through `ServerPlayerGameMode.destroyBlock`, so `BreakEvent` still fires and drops still work.
+- **Undo moves material both ways**: undoing a fill hands the beads back, undoing a break charges
+  them in again (and is refused while the drop is still on the ground). `break → undo → break`
+  therefore cannot duplicate beads.
+- **Nothing is persisted.** Tool/key/anchor/stroke/undo state lives in `ToolSessions`, a per-player
+  map that is dropped on logout, death, teleport and dimension change, so a stale "tool key held"
+  flag can never survive a crash.
+
 ## Color data license
 
 MARD 291 color data © 2026 MakeBead (https://makebead.com), **MIT** — vendored from

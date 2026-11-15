@@ -4,6 +4,7 @@ import com.pixelbead.beadmode.BeadModeManager
 import com.pixelbead.client.ClientPrefs
 import com.pixelbead.client.gui.ColorPickerScreen
 import com.pixelbead.client.gui.PixelBeadOptionsScreen
+import com.pixelbead.client.key.BeadKeyMappings
 import com.pixelbead.config.ClientConfig
 import com.pixelbead.config.HudPosition
 import com.pixelbead.inventory.BeadInventory
@@ -15,7 +16,8 @@ import net.minecraft.network.chat.Component
 import net.neoforged.neoforge.client.gui.GuiLayer
 
 /**
- * Compact bead-mode HUD: the 18 virtual color slots, current code/count and transient toasts.
+ * Compact bead-mode HUD: the 18 virtual color slots, current code/count, transient toasts and
+ * the tool-key hint.
  * Hidden while the color picker is open — the picker draws its own mirrored hotbar and the two
  * surfaces are intentionally independent (no shared preview state).
  *
@@ -27,12 +29,22 @@ import net.neoforged.neoforge.client.gui.GuiLayer
  * DeltaTracker); text is GuiGraphicsExtractor.text(...), rects are fill(...).
  */
 object BeadHudLayer : GuiLayer {
-    private var toast: String? = null
+    private var toast: Component? = null
+    private var toastOk = false
     private var toastUntil: Long = 0
 
-    fun showToast(key: String) {
-        toast = key
-        toastUntil = System.currentTimeMillis() + 2000L
+    /** Tool results that are good news; everything else is reported in warning red. */
+    private val successKeys = setOf("filled", "broken", "undo_done", "anchor")
+
+    fun showToast(key: String, arg: String = "", arg2: String = "") {
+        val path = "message.pixelbead.$key"
+        toast = when {
+            arg2.isNotEmpty() -> Component.translatable(path, arg, arg2)
+            arg.isNotEmpty() -> Component.translatable(path, arg)
+            else -> Component.translatable(path)
+        }
+        toastOk = key in successKeys
+        toastUntil = System.currentTimeMillis() + if (toastOk) 1200L else 2000L
     }
 
     override fun render(graphics: GuiGraphicsExtractor, delta: DeltaTracker) {
@@ -56,28 +68,33 @@ object BeadHudLayer : GuiLayer {
         BeadHotbarView.draw(graphics, x0, y0, cols, size, state)
 
         // Bottom dock: text stacks above the bar. Side docks: text runs beside the column.
+        val columnRight = position == HudPosition.RIGHT
         val textX = when (position) {
             HudPosition.BOTTOM -> x0
             HudPosition.LEFT -> x0 + BeadHotbarView.widthFor(cols, size) + 6
             HudPosition.RIGHT -> 0
         }
-        val textY = if (position == HudPosition.BOTTOM) y0 - 12 else y0
+        fun line(component: Component, row: Int, color: Int) {
+            val y = if (position == HudPosition.BOTTOM) y0 - 12 - 12 * row else y0 + 12 * row
+            val x = if (columnRight) x0 - 6 - mc.font.width(component) else textX
+            graphics.text(mc.font, component, x, y, color)
+        }
 
         val current = state.selectedColorId()
         if (current != null) {
             val color = Palette.byId(current)
             val countText = if (player.isCreative) "∞" else BeadInventory.countBead(player, current).toString()
-            val label = Component.literal("${color?.code ?: current}  ×$countText")
-            val x = if (position == HudPosition.RIGHT) x0 - 6 - mc.font.width(label) else textX
-            graphics.text(mc.font, label, x, textY, 0xFFFFFFFF.toInt())
+            line(Component.literal("${color?.code ?: current}  ×$countText"), 0, 0xFFFFFFFF.toInt())
+        }
+
+        // Tool hint only while the modifier is actually held, so the HUD stays quiet otherwise.
+        if (screen == null && BeadKeyMappings.TOOL.isDown) {
+            line(Component.translatable("gui.pixelbead.tool_hint"), 2, 0xFF8ED0F0.toInt())
         }
 
         val t = toast
         if (t != null && System.currentTimeMillis() < toastUntil) {
-            val message = Component.translatable("message.pixelbead.$t")
-            val x = if (position == HudPosition.RIGHT) x0 - 6 - mc.font.width(message) else textX
-            val y = if (position == HudPosition.BOTTOM) textY - 12 else textY + 12
-            graphics.text(mc.font, message, x, y, 0xFFFF5555.toInt())
+            line(t, 1, if (toastOk) 0xFF7CE07C.toInt() else 0xFFFF5555.toInt())
         } else if (t != null) {
             toast = null
         }

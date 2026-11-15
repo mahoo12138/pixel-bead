@@ -479,6 +479,42 @@ OpenGL 3.3 NVIDIA 610.88），mod 列表含 Pixel Bead 0.1.0，输出
   占位；`runClient` 实测首次进入存档后聊天栏出现两条欢迎语，重进不再重复。
 
 
+### 拼豆工具键（2026-11-15，用户要求「提高拼豆效率」）
+社区方案对照后落成五条，全部只在拼豆模式内生效，全部受 `tool.enabled` 总开关约束：
+
+| 手势 | 行为 |
+|---|---|
+| 按住右键拖动 | **连笔**：把光标跳过的格子用 Bresenham 补齐（仅同面、法线坐标一致、间距 ≤ `tool.max_stroke_gap`；500ms 无操作或换面即断笔） |
+| 直接左键点拼豆 | **橡皮**：点击的拼豆立即消失，扫过的格子同样插值补齐 |
+| `~` + 右键 | **两点填充**：第一次设锚点，第二次填满该平面内的矩形（按住潜行只连一条直线），面积上限 `tool.max_area` |
+| `~` + 左键 | **区域拆除**：面朝平面内 `(2*radius+1)²` 的拼豆块 |
+| `Z` | **撤销**最近一次连笔/填充/拆除（`tool.undo_steps`，默认 8） |
+
+- **不需要坐标包**：锚点与填充都由两次真实 use-on 事件驱动，服务端自己算两个角；新增的
+  client→server 包只有 `ToolKey(boolean)`（VeinMiner 同款做法）与 `UndoRequest`(unit)。
+- **逐格走原版管线**：`BeadPlacement.placeAt()` 仍是 `ItemStack.useOn` → `EntityPlaceEvent`，
+  领地/保护模组照旧能逐格否决；拆除走 `ServerPlayerGameMode.destroyBlock`，`BreakEvent` 照常触发、
+  生存照常掉落。
+- **只拆拼豆块**：`collectAndDestroy` 逐格 `BeadBlocks.isBead` 过滤，误触不会吃掉建筑。
+- **撤销双向结算材料**：填充的格子返还拼豆，拆除的格子扣回拼豆（掉落物还没捡到就拒绝撤销），
+  所以 `拆→撤销→再拆` 不能复制材料。创造或 `survival_consume_items=false` 时不动物品。
+- **几何纯函数化**：`ShapeMath`（line/rect/square，无 MC 类型）单独 `ShapeMathTest` 覆盖；
+  世界坐标 <-> 平面坐标的换算集中在 `BeadPlacement.planeCoords/onPlane/samePlane`。
+- **状态不落盘**：`ToolSessions` 是内存 map，登出/死亡/传送/换维度即清，崩溃后不会留下
+  「工具键仍是按下」的僵尸态。
+- **HUD**：按住工具键时多一行 `工具：右键 区域填充 / 左键 区域拆除`；toast 支持两个 `%s` 参数，
+  成功类消息（填充/拆除/撤销/锚点）绿色，失败类红色。
+- **配置**：`tool.enabled / max_stroke_gap(8) / max_area(512) / break_radius(1) / undo_steps(8) /
+  cooldown_ms(50)`。
+- **验证**：`./gradlew build` → 27 项测试全过（新增 `ShapeMathTest` 5 项）。
+  实机无法注入鼠标（SDL 抓取窗口会吞掉合成鼠标事件），故临时加过 `/pixelbead selftest`
+  在真实服务端跑「锚点 → 9 格矩形 → 3×3 拆除 → 两次撤销」，结果
+  `probe=PLACED fill=9/9 break=0 undoBreak=9 undoFill=0` 全部符合预期，验证后已删除该命令。
+- **顺带修掉的真实 bug**：`BlockPlaceContext` 把「可替换的被点击方块」当成要填的格子，所以
+  悬空填充（支撑块是空气）时 `useOn` 会把拼豆放到相邻格。现在 `placeAt` 检测支撑块是否可替换，
+  可替换就以目标格本身作为命中方块；并在 `useOn` 之后断言 `targetPos` 真的变成拼豆，
+  否则按 `blocked` 处理（不会白扣一颗豆）。
+
 **最终回归**：`./gradlew build` → `BUILD SUCCESSFUL`，
 `PaletteTest 7 + WorkbenchLogicTest 8 + ResourceSchemaTest 7 = 22` 项全通过，
 产物 `build/libs/pixel-bead-0.1.0.jar`。

@@ -1,10 +1,11 @@
 package com.pixelbead.beadmode
 
 import com.pixelbead.PixelBead
+import com.pixelbead.blocks.BeadBlocks
+import com.pixelbead.config.ServerConfig
 import net.minecraft.server.level.ServerPlayer
 import net.minecraft.util.TriState
 import net.minecraft.world.InteractionResult
-import net.minecraft.world.entity.player.Player
 import net.neoforged.bus.api.SubscribeEvent
 import net.neoforged.fml.common.EventBusSubscriber
 import net.neoforged.neoforge.event.entity.EntityTeleportEvent
@@ -13,11 +14,12 @@ import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent
 import net.neoforged.neoforge.event.entity.player.UseItemOnBlockEvent
 
 /**
- * Server-authoritative interception. In bead mode right-click always places the selected bead
- * and normal block/item *use* is denied (no chests, doors, buckets, food, ...). Breaking is
- * intentionally **unrestricted**: bead and normal blocks alike can be mined with left-click at
- * vanilla speed, so this mode can be used for normal demolition work too.
- * Cleanup triggers restore abilities via the single forceExit path (design §6.5 / §9.4).
+ * Server-authoritative interception. In bead mode right-click places (or fills) the selected
+ * bead and normal block/item *use* is denied (no chests, doors, buckets, food, ...). Breaking
+ * non-bead blocks is intentionally **unrestricted**: they mine with left-click at vanilla
+ * speed, so this mode can be used for normal demolition work too. Bead blocks themselves are
+ * erased instantly, which is what makes iterating on a picture bearable.
+ * Cleanup triggers restore abilities and drop per-player tool state (design §6.5 / §9.4).
  */
 @EventBusSubscriber(modid = PixelBead.MODID)
 object BeadModeEvents {
@@ -34,7 +36,43 @@ object BeadModeEvents {
         // BeadKeyHandler does not cancel InteractionKeyMappingTriggered for attack/use —
         // otherwise startUseItem() is never called and no packet leaves the client at all.
         e.isCanceled = true
-        if (player is ServerPlayer) e.face?.let { face -> BeadPlacement.place(player, e.pos, face) }
+        if (player !is ServerPlayer) return
+        val face = e.face ?: return
+        val tool = ServerConfig.toolEnabled.get() && ToolSessions.of(player).held
+        if (tool) {
+            // Tool key: first click anchors, second fills the rectangle. Both are real use-on
+            // interactions, so no coordinate ever travels in a payload.
+            AreaTools.onToolUse(player, e.pos, face, player.isShiftKeyDown)
+        } else {
+            BeadPlacement.place(player, e.pos, face)
+        }
+    }
+
+    /**
+     * Left click. Bead blocks are erased instantly (the eraser half of the tools); with the
+     * tool key held a square is cleared instead. Non-bead blocks keep vanilla mining, so the
+     * mode stays usable for ordinary demolition.
+     */
+    @SubscribeEvent
+    fun onLeftClickBlock(e: PlayerInteractEvent.LeftClickBlock) {
+        if (e.action != PlayerInteractEvent.LeftClickBlock.Action.START) return
+        val player = e.entity as? ServerPlayer ?: return
+        if (!BeadModeManager.state(player).active) return
+        if (!ServerConfig.toolEnabled.get()) return
+        if (!BeadBlocks.isBead(player.level().getBlockState(e.pos))) return
+
+        val face = e.face ?: return
+        e.isCanceled = true
+        val session = ToolSessions.of(player)
+        if (session.held) {
+            val now = System.currentTimeMillis()
+            if (now - session.lastToolAt >= ServerConfig.toolCooldownMs.get().toLong()) {
+                session.lastToolAt = now
+                AreaTools.breakArea(player, e.pos, face)
+            }
+        } else {
+            AreaTools.erase(player, e.pos, face)
+        }
     }
 
     @SubscribeEvent
@@ -56,8 +94,8 @@ object BeadModeEvents {
         if (BeadModeManager.state(player).active) e.isCanceled = true
     }
 
-    // NOTE: breaking is deliberately NOT intercepted. Left-click mines bead and normal blocks
-    // alike at vanilla speed (design §6.7 was relaxed on 2026-11-15 at the user's request).
+    // NOTE: breaking non-bead blocks is deliberately NOT intercepted. Left-click mines them at
+    // vanilla speed (design §6.7 was relaxed on 2026-11-15 at the user's request).
 
     // ---- cleanup triggers ----
     @SubscribeEvent
@@ -67,22 +105,34 @@ object BeadModeEvents {
 
     @SubscribeEvent
     fun onRespawn(e: PlayerEvent.PlayerRespawnEvent) {
-        (e.entity as? ServerPlayer)?.let { BeadModeManager.forceExit(it) }
+        (e.entity as? ServerPlayer)?.let {
+            BeadModeManager.forceExit(it)
+            ToolSessions.clear(it)
+        }
     }
 
     @SubscribeEvent
     fun onChangedDimension(e: PlayerEvent.PlayerChangedDimensionEvent) {
-        (e.entity as? ServerPlayer)?.let { BeadModeManager.forceExit(it) }
+        (e.entity as? ServerPlayer)?.let {
+            BeadModeManager.forceExit(it)
+            ToolSessions.clear(it)
+        }
     }
 
     @SubscribeEvent
     fun onTeleport(e: EntityTeleportEvent) {
-        (e.entity as? ServerPlayer)?.let { BeadModeManager.forceExit(it) }
+        (e.entity as? ServerPlayer)?.let {
+            BeadModeManager.forceExit(it)
+            ToolSessions.clear(it)
+        }
     }
 
     @SubscribeEvent
     fun onLoggedOut(e: PlayerEvent.PlayerLoggedOutEvent) {
-        (e.entity as? ServerPlayer)?.let { BeadModeManager.forceExit(it) }
+        (e.entity as? ServerPlayer)?.let {
+            BeadModeManager.forceExit(it)
+            ToolSessions.clear(it)
+        }
     }
 
     @SubscribeEvent

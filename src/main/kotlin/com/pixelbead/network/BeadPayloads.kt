@@ -48,11 +48,45 @@ data class SetHotbarColor(val slot: Int, val colorId: String) : CustomPacketPayl
 }
 
 /** Server -> client HUD toast (translation key or status code, e.g. "insufficient"). */
-data class HudMessage(val key: String) : CustomPacketPayload {
+data class HudMessage(
+    val key: String,
+    /** Optional `%s` arguments; the toast only formats when they are non-empty. */
+    val arg: String = "",
+    val arg2: String = "",
+) : CustomPacketPayload {
     companion object {
         val TYPE = CustomPacketPayload.Type<HudMessage>(id("hud_message"))
-        val STREAM_CODEC: StreamCodec<RegistryFriendlyByteBuf, HudMessage> =
-            StreamCodec.composite(ByteBufCodecs.STRING_UTF8, { it.key }, ::HudMessage)
+        val STREAM_CODEC: StreamCodec<RegistryFriendlyByteBuf, HudMessage> = StreamCodec.composite(
+            ByteBufCodecs.STRING_UTF8, { it.key },
+            ByteBufCodecs.STRING_UTF8, { it.arg },
+            ByteBufCodecs.STRING_UTF8, { it.arg2 },
+            ::HudMessage,
+        )
+    }
+
+    override fun type(): CustomPacketPayload.Type<out CustomPacketPayload> = TYPE
+}
+
+/**
+ * Tool key state (`~` by default). Still no coordinates: the server only needs to know whether
+ * the modifier is held, and derives every position from the interaction events it already gets.
+ */
+data class ToolKey(val held: Boolean) : CustomPacketPayload {
+    companion object {
+        val TYPE = CustomPacketPayload.Type<ToolKey>(id("tool_key"))
+        val STREAM_CODEC: StreamCodec<RegistryFriendlyByteBuf, ToolKey> =
+            StreamCodec.composite(ByteBufCodecs.BOOL, { it.held }, ::ToolKey)
+    }
+
+    override fun type(): CustomPacketPayload.Type<out CustomPacketPayload> = TYPE
+}
+
+/** Undo the player's last bead-tool operation. */
+data class UndoRequest(val noop: Boolean = false) : CustomPacketPayload {
+    companion object {
+        val TYPE = CustomPacketPayload.Type<UndoRequest>(id("undo"))
+        val STREAM_CODEC: StreamCodec<RegistryFriendlyByteBuf, UndoRequest> =
+            StreamCodec.unit(UndoRequest())
     }
 
     override fun type(): CustomPacketPayload.Type<out CustomPacketPayload> = TYPE

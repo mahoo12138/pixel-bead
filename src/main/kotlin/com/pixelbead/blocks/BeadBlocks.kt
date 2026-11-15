@@ -37,6 +37,13 @@ object BeadBlocks {
 
     fun isBead(state: BlockState): Boolean = state.block is BeadBlock
 
+    /** Reverse lookup used by the undo/material bookkeeping: block -> palette color id. */
+    private val colorIds: Map<Block, String> by lazy {
+        holders.entries.associate { (id, holder) -> holder.get() as Block to id }
+    }
+
+    fun colorIdOf(state: BlockState): String? = colorIds[state.block]
+
     private fun uniformProps(): BlockBehaviour.Properties =
         BlockBehaviour.Properties.of()
             .destroyTime(0.5f)

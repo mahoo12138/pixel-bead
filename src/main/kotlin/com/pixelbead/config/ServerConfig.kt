@@ -35,6 +35,29 @@ object ServerConfig {
         builder.comment("Registry ids never allowed as workbench input.")
             .defineList("crafting.blacklist", emptyList<String>(), Supplier { "" }) { it is String }
 
+    // [tool]
+    val toolEnabled: ModConfigSpec.ConfigValue<Boolean> = builder
+        .comment(
+            "Bead tools: drag-stroke painting/erasing, tool-key area fill and area break.",
+            "Turning this off restores plain one-click-per-block behaviour.",
+        )
+        .define("tool.enabled", true)
+    val toolMaxStrokeGap: ModConfigSpec.ConfigValue<Int> = builder
+        .comment("Largest gap (in blocks) a drag stroke may bridge before it stops interpolating.")
+        .defineInRange("tool.max_stroke_gap", 8, 1, 32)
+    val toolMaxArea: ModConfigSpec.ConfigValue<Int> = builder
+        .comment("Largest rectangle a single area fill may touch.")
+        .defineInRange("tool.max_area", 512, 1, 4096)
+    val toolBreakRadius: ModConfigSpec.ConfigValue<Int> = builder
+        .comment("Radius of the tool-key area break in the face plane (1 = 3x3).")
+        .defineInRange("tool.break_radius", 1, 1, 3)
+    val toolUndoSteps: ModConfigSpec.ConfigValue<Int> = builder
+        .comment("How many bead-tool operations can be undone per player (0 disables undo).")
+        .defineInRange("tool.undo_steps", 8, 0, 32)
+    val toolCooldownMs: ModConfigSpec.ConfigValue<Int> = builder
+        .comment("Minimum interval between two tool-key area operations, in milliseconds.")
+        .defineInRange("tool.cooldown_ms", 50, 0, 1000)
+
     // [interaction]
     val respectClaimProtection: ModConfigSpec.ConfigValue<Boolean> =
         builder.comment("Always go through the standard interaction event chain so claim mods can veto.")
