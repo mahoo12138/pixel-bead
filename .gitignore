@@ -28,3 +28,7 @@ Thumbs.db
 
 # Sandbox-only build mirror (not shipped)
 .sandbox/
+
+# Local workspace data and design references (not shipped)
+.workbuddy/
+art/

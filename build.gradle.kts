@@ -333,6 +333,30 @@ sourceSets {
 
 tasks.named<ProcessResources>("processResources") {
     dependsOn(generateBeadResources)
+
+    // Single source of truth for publishing metadata: gradle.properties -> mods.toml.
+    // Without this, the jar file name and the version shown in the in-game mod list
+    // could silently drift apart on a release. Kept as a task-local value so the
+    // copy action captures only this Map, never the build-script object (the
+    // configuration cache rejects script references).
+    val modMetadata = mapOf(
+        "mod_id" to project.providers.gradleProperty("mod_id").get(),
+        "mod_name" to project.providers.gradleProperty("mod_name").get(),
+        "mod_version" to project.providers.gradleProperty("mod_version").get(),
+        "mod_authors" to project.providers.gradleProperty("mod_authors").get(),
+        "mod_license" to project.providers.gradleProperty("mod_license").get(),
+        "mod_url_source" to project.providers.gradleProperty("mod_url_source").get(),
+        "mod_url_issues" to project.providers.gradleProperty("mod_url_issues").get(),
+        "mod_url_license" to project.providers.gradleProperty("mod_url_license").get(),
+    )
+    filesMatching("META-INF/neoforge.mods.toml") {
+        expand(modMetadata)
+    }
+
+    // MIT requires the licence text to travel with every distribution; the colour
+    // data attribution travels next to it. Both also stay at the repo root.
+    from("LICENSE") { into("META-INF") }
+    from("NOTICE.md") { into("META-INF") }
 }
 
 tasks.withType<Test>().configureEach {

@@ -1,14 +1,36 @@
-# Pixel Bead
+# Pixel Bead / 像素豆
 
-A Minecraft mod (Kotlin) that adds **291 MARD solid-color bead blocks**, a **dye workbench**
-that batch-converts plain blocks into beads, and a server-authoritative **bead building mode**
-with a virtual 18-slot color hotbar and a full color picker.
+<p align="center">
+  <img src="src/main/resources/assets/pixelbead/icon.png" width="140" alt="Pixel Bead / 像素豆">
+</p>
+
+> 一颗一色，拼出世界。
+
+Minecraft 像素拼豆创作模组：**291 色 MARD 拼豆方块**、把普通方块批量转换为拼豆的
+**拼豆染色工作台**，以及服务端权威的**拼豆建造模式**（18 槽虚拟色带 + 完整颜色选择器）。
+
+| 项目 | 值 |
+|---|---|
+| 中文名称 | 像素豆 |
+| 英文名称 | Pixel Bead |
+| 宣传语 | 一颗一色，拼出世界。 |
+| 项目描述 | Minecraft 像素拼豆创作模组 |
+| 吉祥物 | 白色小狗 |
+| Mod ID | `pixelbead` |
+| Git 仓库 | `pixel-bead` — <https://github.com/mahoo12138/pixel-bead> |
+| 当前版本 | `0.1.0-rc.1` |
+| 许可证 | 代码 MIT（[LICENSE](LICENSE)）；第三方素材与图标来源见 [NOTICE.md](NOTICE.md) |
+| 运行环境 | Minecraft 26.3 · NeoForge 26.3.0.99+ · Kotlin for Forge 6.5.0+ · Java 25 |
 
 - **Minecraft** 26.3 · **NeoForge** 26.3.0.99 · **Kotlin** 2.4.21 (via Kotlin for Forge 6.5.0)
 - **ModDevGradle** 2.0.148 · **Gradle** 9.9.1 · **Java** 25
 - modId `pixelbead`, package `com.pixelbead`
 
-See `minecraft-bead-mod-design.md` for the full design and `color-data/NOTICE.md` for data attribution.
+设计见 [SPEC.md](SPEC.md) 与 [PLAN.md](PLAN.md)，色彩数据署名见
+[color-data/NOTICE.md](color-data/NOTICE.md)，发布说明见 [CHANGELOG.md](CHANGELOG.md)，
+各平台字段映射见 [PUBLISHING.md](PUBLISHING.md)。
+
+> 下文验证日志记录的是 `0.1.0` 开发构建；当前发布版本为 `0.1.0-rc.1`，modId 与存档格式未变。
 
 ## Build & run
 
@@ -216,8 +238,15 @@ Why it is built like this:
   per-player map dropped on logout, death, teleport and dimension change, so a stale "tool key held"
   flag can never survive a crash.
 
-## Color data license
+## Licensing & credits
 
-MARD 291 color data © 2026 MakeBead (https://makebead.com), **MIT** — vendored from
-`makebead/craft-color-codes` (`data/csv/mard-291.csv`). HEX/RGB are screen reference values, not
-manufacturer measurements. See `color-data/LICENSE` and `color-data/NOTICE.md`.
+- **代码 / 构建脚本 / 资源生成器**：MIT，© 2026 mahoo12138 — 全文见 [LICENSE](LICENSE)。
+- **MARD 291 色彩数据**：MIT，© 2026 MakeBead (<https://makebead.com>)，从
+  `makebead/craft-color-codes` 的 `data/csv/mard-291.csv` 原样引入。HEX/RGB 是屏幕参考值，
+  不是厂商实测值。见 [color-data/LICENSE](color-data/LICENSE) 与
+  [color-data/NOTICE.md](color-data/NOTICE.md)。
+- **图标**：`assets/pixelbead/icon.png` 由 `tools/make_icon.py` 从同一份 MARD 色卡计算生成
+  （291 颗色块的黄金角螺旋，暖纸底 + 自带描边），只依赖 Python 标准库，可逐像素复现；
+  项目不含第三方图像素材。见 [NOTICE.md](NOTICE.md) 第 4 节。
+- **Minecraft / NeoForge / Kotlin for Forge**：独立社区模组，与 Mojang Studios、Microsoft、
+  NeoForged 无隶属或背书关系；相关商标归各自权利人所有。
