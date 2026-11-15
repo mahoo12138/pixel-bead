@@ -79,7 +79,7 @@ object AreaTools {
             toast(player, "too_large", cells.size.toString(), limit.toString())
             return true
         }
-        return if (mode.erase) erase(player, cells) else fill(player, cells, clickedPos, face)
+        return if (mode.erase) erase(player, cells) else fill(player, cells, face)
     }
 
     /** Two points -> the cells of the requested shape, or null when the plane is undefined. */
@@ -90,12 +90,7 @@ object AreaTools {
         return shape?.map { BlockPos(it.x, it.y, it.z) }
     }
 
-    private fun fill(
-        player: ServerPlayer,
-        cells: List<BlockPos>,
-        clickedPos: BlockPos,
-        face: Direction,
-    ): Boolean {
+    private fun fill(player: ServerPlayer, cells: List<BlockPos>, face: Direction): Boolean {
         val level = player.level()
         val placed = ArrayList<UndoOp.Cell>()
         var ranOut = false
@@ -103,10 +98,12 @@ object AreaTools {
             if (!level.isLoaded(pos)) continue
             val previous = level.getBlockState(pos)
             if (!previous.canBeReplaced()) continue
-            // Free-floating cells have no solid neighbour to click: hit the cell itself.
-            val click = if (level.getBlockState(pos.relative(face.opposite)).canBeReplaced()) pos else clickedPos
+            // Each cell must be placed against *its own* neighbour: the vanilla context derives the
+            // final position from the clicked block, so reusing the player's click would put every
+            // bead of a wall/floor fill into the same cell (and fail on the rest).
+            val support = pos.relative(face.opposite)
             when (
-                BeadPlacement.placeAt(player, pos, click, face, report = false, trackUndo = false)
+                BeadPlacement.placeAt(player, pos, support, face, report = false, trackUndo = false)
             ) {
                 BeadPlacement.Result.PLACED -> placed += UndoOp.Cell(pos, previous)
                 BeadPlacement.Result.NO_BEADS -> {
