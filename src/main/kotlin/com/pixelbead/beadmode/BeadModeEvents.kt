@@ -38,20 +38,19 @@ object BeadModeEvents {
         e.isCanceled = true
         if (player !is ServerPlayer) return
         val face = e.face ?: return
-        val tool = ServerConfig.toolEnabled.get() && ToolSessions.of(player).held
-        if (tool) {
-            // Tool key: first click anchors, second fills the rectangle. Both are real use-on
-            // interactions, so no coordinate ever travels in a payload.
-            AreaTools.onToolUse(player, e.pos, face, player.isShiftKeyDown)
+        val fast = ServerConfig.toolEnabled.get() && ToolSessions.of(player).held
+        if (fast) {
+            // Fast mode: first click marks (and places), second click closes the shape. Still a
+            // real use-on interaction, so no coordinate ever travels in a payload.
+            AreaTools.onFastUse(player, e.pos, face)
         } else {
             BeadPlacement.place(player, e.pos, face)
         }
     }
 
     /**
-     * Left click. Bead blocks are erased instantly (the eraser half of the tools); with the
-     * tool key held a square is cleared instead. Non-bead blocks keep vanilla mining, so the
-     * mode stays usable for ordinary demolition.
+     * Left click. Bead blocks are erased instantly (the eraser half of the tools, active in every
+     * mode). Non-bead blocks keep vanilla mining, so the mode stays usable for demolition.
      */
     @SubscribeEvent
     fun onLeftClickBlock(e: PlayerInteractEvent.LeftClickBlock) {
@@ -63,16 +62,7 @@ object BeadModeEvents {
 
         val face = e.face ?: return
         e.isCanceled = true
-        val session = ToolSessions.of(player)
-        if (session.held) {
-            val now = System.currentTimeMillis()
-            if (now - session.lastToolAt >= ServerConfig.toolCooldownMs.get().toLong()) {
-                session.lastToolAt = now
-                AreaTools.breakArea(player, e.pos, face)
-            }
-        } else {
-            AreaTools.erase(player, e.pos, face)
-        }
+        AreaTools.eraseStroke(player, e.pos, face)
     }
 
     @SubscribeEvent

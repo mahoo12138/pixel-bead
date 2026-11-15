@@ -84,7 +84,7 @@ object UndoStack {
         for (cell in restore) level.setBlock(cell.pos, cell.old, 3)
         session.undo.removeLast()
         session.clearStroke()
-        session.clearAnchor()
+        session.clearMark()
         PacketDistributor.sendToPlayer(player, HudMessage("undo_done", restore.size.toString()))
         return true
     }
@@ -99,7 +99,7 @@ object UndoStack {
     fun forget(player: Player) {
         val session = ToolSessions.peek(player) ?: return
         session.undo.clear()
-        session.clearAnchor()
+        session.clearMark()
         session.clearStroke()
     }
 }

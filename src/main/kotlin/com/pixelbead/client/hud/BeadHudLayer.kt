@@ -2,6 +2,7 @@ package com.pixelbead.client.hud
 
 import com.pixelbead.beadmode.BeadModeManager
 import com.pixelbead.client.ClientPrefs
+import com.pixelbead.client.ToolClientState
 import com.pixelbead.client.gui.ColorPickerScreen
 import com.pixelbead.client.gui.PixelBeadOptionsScreen
 import com.pixelbead.client.key.BeadKeyMappings
@@ -87,9 +88,16 @@ object BeadHudLayer : GuiLayer {
             line(Component.literal("${color?.code ?: current}  ×$countText"), 0, 0xFFFFFFFF.toInt())
         }
 
-        // Tool hint only while the modifier is actually held, so the HUD stays quiet otherwise.
-        if (screen == null && BeadKeyMappings.TOOL.isDown) {
-            line(Component.translatable("gui.pixelbead.tool_hint"), 2, 0xFF8ED0F0.toInt())
+        // Fast mode readout only while the modifier is actually held, so the HUD stays quiet.
+        if (screen == null && player.isCreative && BeadKeyMappings.TOOL.isDown) {
+            line(
+                Component.translatable(
+                    "gui.pixelbead.tool_hint",
+                    Component.translatable(ToolClientState.mode.translationKey),
+                ),
+                2,
+                0xFF8ED0F0.toInt(),
+            )
         }
 
         val t = toast

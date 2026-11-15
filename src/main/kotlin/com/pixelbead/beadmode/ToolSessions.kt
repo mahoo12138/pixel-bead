@@ -9,8 +9,8 @@ import net.minecraft.world.level.block.state.BlockState
 import java.util.UUID
 
 /**
- * Server-side scratch state for the bead tools: is the tool key held, where is the pending
- * anchor, where did the last stroke land, and what can still be undone.
+ * Server-side scratch state for the bead tools: is the tool key held, which fast mode is armed,
+ * where is the pending first point, where did the last stroke land, and what can still be undone.
  *
  * Deliberately **not** an attachment: none of it should survive a relog, and a persisted
  * "tool key held" flag would leave a player stuck in tool mode after a crash. Entries are
@@ -25,10 +25,13 @@ object ToolSessions {
     class Session {
         var held: Boolean = false
 
-        var anchor: BlockPos? = null
-        var anchorFace: Direction? = null
-        var anchorDimension: ResourceKey<Level>? = null
-        var anchorAt: Long = 0L
+        /** Fast-mode behaviour, cycled by the arrow keys while the tool key is held. */
+        var mode: ToolMode = ToolMode.LINE_PLACE
+
+        /** First marked point of a fast-mode shape (the second click applies it). */
+        var mark: BlockPos? = null
+        var markDimension: ResourceKey<Level>? = null
+        var markAt: Long = 0L
 
         var lastPlace: BlockPos? = null
         var lastPlaceFace: Direction? = null
@@ -38,17 +41,13 @@ object ToolSessions {
         var lastBreakFace: Direction? = null
         var lastBreakAt: Long = 0L
 
-        /** Last tool-key area operation, used only for the cooldown (never for strokes). */
-        var lastToolAt: Long = 0L
-
         val undo: ArrayDeque<UndoOp> = ArrayDeque()
         var undoMergeAt: Long = 0L
 
-        fun clearAnchor() {
-            anchor = null
-            anchorFace = null
-            anchorDimension = null
-            anchorAt = 0L
+        fun clearMark() {
+            mark = null
+            markDimension = null
+            markAt = 0L
         }
 
         fun clearStroke() {

@@ -6,81 +6,107 @@ import com.pixelbead.network.HudMessage
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
 import net.minecraft.server.level.ServerPlayer
+import net.minecraft.world.level.GameType
 import net.neoforged.neoforge.network.PacketDistributor
 
 /**
- * The bead tools behind the tool key (`~` by default):
+ * Fast mode, behind the tool key (`~` by default).
  *
- *  - tool key + right click: first click sets an anchor, second click fills the rectangle
- *    between the two corners on that face plane (hold sneak for a single line instead).
- *  - tool key + left click: breaks a square of bead blocks in the face plane (3x3 by default).
- *  - plain left click (no tool key): the eraser stroke — every bead block the cursor sweeps
- *    over is removed, with the skipped cells interpolated like the painting stroke.
+ * Holding the key and right-clicking builds a shape from **two points**: the first click places a
+ * bead (place modes) and remembers the point, the second click closes the shape and fills or
+ * erases everything between the two, diagonals included. The arrow keys cycle the four modes:
  *
- * Safety rails, on purpose:
- *  - only bead blocks are ever removed in bulk, so a stray tool click can never eat a build;
- *  - every placement still goes through [BeadPlacement.placeAt], i.e. the vanilla use-on
- *    pipeline, so claim mods keep seeing one EntityPlaceEvent per cell;
- *  - every break goes through ServerPlayerGameMode.destroyBlock, which fires BreakEvent;
- *  - undo is capped by `tool.undo_steps` and needs the material back in the inventory.
+ *  - line place  : one diagonal line of beads between the two points
+ *  - line erase  : the same line, but removed
+ *  - plane place : the rectangle spanned by the two points (they must lie on one plane)
+ *  - plane erase : the same rectangle, removed
+ *
+ * Safety rails:
+ *  - creative only for now: survival keeps plain one-click-per-block behaviour;
+ *  - placement still goes through [BeadPlacement.placeAt], i.e. the vanilla use-on pipeline, so
+ *    claim mods see one EntityPlaceEvent per cell;
+ *  - erasing goes through ServerPlayerGameMode.destroyBlock, so BreakEvent still fires;
+ *  - every operation is undoable (`Z`) and capped by `tool.max_area`.
  */
 object AreaTools {
-    /** An anchor older than this is stale and the next click just re-anchors. */
-    private const val ANCHOR_TIMEOUT_MS = 30_000L
+    /** A pending first point older than this is stale; the next click just starts over. */
+    private const val MARK_TIMEOUT_MS = 60_000L
 
-    /** `tool` + right click: anchor on first click, fill on the second. */
-    fun onToolUse(player: ServerPlayer, clickedPos: BlockPos, face: Direction, line: Boolean): Boolean {
+    fun fastModeAllowed(player: ServerPlayer): Boolean =
+        ServerConfig.toolEnabled.get() && player.gameMode.gameModeForPlayer == GameType.CREATIVE
+
+    /**
+     * Right click while the tool key is held.
+     * @return true when the click was consumed by fast mode.
+     */
+    fun onFastUse(player: ServerPlayer, clickedPos: BlockPos, face: Direction): Boolean {
+        if (!fastModeAllowed(player)) {
+            toast(player, "creative_only")
+            return true
+        }
         val session = ToolSessions.of(player)
-        val dimension = player.level().dimension()
+        val mode = session.mode
         val target = clickedPos.relative(face)
-        val stale = System.currentTimeMillis() - session.anchorAt > ANCHOR_TIMEOUT_MS
-        val anchor = session.anchor
-        val reusable = anchor != null && !stale &&
-            session.anchorFace == face &&
-            session.anchorDimension == dimension &&
-            BeadPlacement.samePlane(anchor, target, face)
+        val dimension = player.level().dimension()
+        val mark = session.mark
+        val stale = mark == null ||
+            session.markDimension != dimension ||
+            System.currentTimeMillis() - session.markAt > MARK_TIMEOUT_MS
 
-        if (!reusable) {
-            session.anchor = target
-            session.anchorFace = face
-            session.anchorDimension = dimension
-            session.anchorAt = System.currentTimeMillis()
-            toast(player, "anchor", "${target.x} ${target.y} ${target.z}")
+        if (stale) {
+            // Place modes create the first bead for real; erase modes only remember the point.
+            if (!mode.erase) {
+                val result = BeadPlacement.placeAt(
+                    player, target, clickedPos, face, report = true, trackUndo = true,
+                )
+                if (result != BeadPlacement.Result.PLACED) return true
+            }
+            session.mark = target
+            session.markDimension = dimension
+            session.markAt = System.currentTimeMillis()
+            toast(player, "mark", "${target.x} ${target.y} ${target.z}")
             return true
         }
 
-        session.clearAnchor()
-        val a = BeadPlacement.planeCoords(anchor, face) ?: return false
-        val b = BeadPlacement.planeCoords(target, face) ?: return false
-        val cells = if (line) ShapeMath.line(a, b) else ShapeMath.rect(a, b)
-        return fill(player, anchor, face, cells)
-    }
-
-    /** Fills [cells] (plane coordinates) with the selected bead, anchored on [anchor]. */
-    private fun fill(
-        player: ServerPlayer,
-        anchor: BlockPos,
-        face: Direction,
-        cells: List<ShapeMath.Cell>,
-    ): Boolean {
+        session.clearMark()
+        val cells = cellsBetween(mark!!, target, mode)
+        if (cells == null) {
+            toast(player, "not_plane")
+            return true
+        }
         val limit = ServerConfig.toolMaxArea.get()
         if (cells.size > limit) {
             toast(player, "too_large", cells.size.toString(), limit.toString())
-            return false
+            return true
         }
+        return if (mode.erase) erase(player, cells) else fill(player, cells, clickedPos, face)
+    }
+
+    /** Two points -> the cells of the requested shape, or null when the plane is undefined. */
+    private fun cellsBetween(a: BlockPos, b: BlockPos, mode: ToolMode): List<BlockPos>? {
+        val ca = ShapeMath.Cell3(a.x, a.y, a.z)
+        val cb = ShapeMath.Cell3(b.x, b.y, b.z)
+        val shape = if (mode.plane) ShapeMath.plane3(ca, cb) else ShapeMath.line3(ca, cb)
+        return shape?.map { BlockPos(it.x, it.y, it.z) }
+    }
+
+    private fun fill(
+        player: ServerPlayer,
+        cells: List<BlockPos>,
+        clickedPos: BlockPos,
+        face: Direction,
+    ): Boolean {
         val level = player.level()
         val placed = ArrayList<UndoOp.Cell>()
         var ranOut = false
-        for (cell in cells) {
-            val pos = BeadPlacement.onPlane(anchor, face, cell.u, cell.v)
+        for (pos in cells) {
             if (!level.isLoaded(pos)) continue
             val previous = level.getBlockState(pos)
             if (!previous.canBeReplaced()) continue
+            // Free-floating cells have no solid neighbour to click: hit the cell itself.
+            val click = if (level.getBlockState(pos.relative(face.opposite)).canBeReplaced()) pos else clickedPos
             when (
-                BeadPlacement.placeAt(
-                    player, pos, pos.relative(face.opposite), face,
-                    report = false, trackUndo = false,
-                )
+                BeadPlacement.placeAt(player, pos, click, face, report = false, trackUndo = false)
             ) {
                 BeadPlacement.Result.PLACED -> placed += UndoOp.Cell(pos, previous)
                 BeadPlacement.Result.NO_BEADS -> {
@@ -99,23 +125,25 @@ object AreaTools {
         return placed.isNotEmpty()
     }
 
-    /** Tool key + left click: square of bead blocks in the face plane. @return true if handled. */
-    fun breakArea(player: ServerPlayer, pos: BlockPos, face: Direction): Boolean {
-        if (!player.abilities.mayBuild) return false
-        val center = BeadPlacement.planeCoords(pos, face) ?: return false
-        val radius = ServerConfig.toolBreakRadius.get()
-        val broken = collectAndDestroy(player, pos, face, ShapeMath.square(center, radius))
-        if (broken.isEmpty()) {
-            toast(player, "nothing")
-            return true
+    /** Removes every block in [cells] — any block, not just beads (the tool key destroys freely). */
+    private fun erase(player: ServerPlayer, cells: List<BlockPos>): Boolean {
+        val level = player.level()
+        val removed = ArrayList<UndoOp.Cell>(cells.size)
+        for (pos in cells) {
+            if (!level.isLoaded(pos)) continue
+            val state = level.getBlockState(pos)
+            if (state.isAir) continue
+            if (player.gameMode.destroyBlock(pos)) removed += UndoOp.Cell(pos, state)
         }
-        UndoStack.record(player, broken, merge = false)
-        toast(player, "broken", broken.size.toString())
-        return true
+        UndoStack.record(player, removed, merge = false)
+        if (removed.isEmpty()) toast(player, "nothing") else toast(player, "erased", removed.size.toString())
+        return removed.isNotEmpty()
     }
 
-    /** Plain left click in bead mode: remove this bead block plus everything swept since. */
-    fun erase(player: ServerPlayer, pos: BlockPos, face: Direction): Boolean {
+    // ---- plain left click eraser (no tool key) ----
+
+    /** Instantly removes the clicked bead plus the cells swept since the previous click. */
+    fun eraseStroke(player: ServerPlayer, pos: BlockPos, face: Direction): Boolean {
         val session = ToolSessions.of(player)
         val now = System.currentTimeMillis()
         val cells = ArrayList<ShapeMath.Cell>()
@@ -130,32 +158,17 @@ object AreaTools {
         session.lastBreakFace = face
         session.lastBreakAt = now
 
-        val broken = collectAndDestroy(player, pos, face, cells)
-        if (broken.isNotEmpty()) UndoStack.record(player, broken, merge = true)
-        return broken.isNotEmpty()
-    }
-
-    /**
-     * Breaks the bead blocks among [cells] (plane coordinates anchored on [origin]) and returns
-     * what was removed so undo can put it back. Non-bead cells are skipped: bulk removal must
-     * never touch a normal build.
-     */
-    private fun collectAndDestroy(
-        player: ServerPlayer,
-        origin: BlockPos,
-        face: Direction,
-        cells: List<ShapeMath.Cell>,
-    ): List<UndoOp.Cell> {
         val level = player.level()
-        val broken = ArrayList<UndoOp.Cell>(cells.size)
+        val removed = ArrayList<UndoOp.Cell>()
         for (cell in cells) {
-            val pos = BeadPlacement.onPlane(origin, face, cell.u, cell.v)
-            if (!level.isLoaded(pos)) continue
-            val state = level.getBlockState(pos)
+            val p = BeadPlacement.onPlane(pos, face, cell.u, cell.v)
+            if (!level.isLoaded(p)) continue
+            val state = level.getBlockState(p)
             if (!BeadBlocks.isBead(state)) continue
-            if (player.gameMode.destroyBlock(pos)) broken += UndoOp.Cell(pos, state)
+            if (player.gameMode.destroyBlock(p)) removed += UndoOp.Cell(p, state)
         }
-        return broken
+        if (removed.isNotEmpty()) UndoStack.record(player, removed, merge = true)
+        return removed.isNotEmpty()
     }
 
     fun undo(player: ServerPlayer): Boolean = UndoStack.undo(player)

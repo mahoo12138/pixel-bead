@@ -39,7 +39,7 @@ object PixelBeadCommand {
                         ctx.source.sendSystemMessage(Component.literal("Bead mode active=${s.active} slot=${s.selectedSlot} color=${s.selectedColorId()}"))
                         1
                     },
-                ),
+                )
         )
     }
 }

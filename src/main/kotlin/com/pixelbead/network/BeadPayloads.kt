@@ -81,6 +81,17 @@ data class ToolKey(val held: Boolean) : CustomPacketPayload {
     override fun type(): CustomPacketPayload.Type<out CustomPacketPayload> = TYPE
 }
 
+/** Fast-mode behaviour picked with the arrow keys (ordinal of [com.pixelbead.beadmode.ToolMode]). */
+data class SetToolMode(val mode: Int) : CustomPacketPayload {
+    companion object {
+        val TYPE = CustomPacketPayload.Type<SetToolMode>(id("tool_mode"))
+        val STREAM_CODEC: StreamCodec<RegistryFriendlyByteBuf, SetToolMode> =
+            StreamCodec.composite(ByteBufCodecs.VAR_INT, { it.mode }, ::SetToolMode)
+    }
+
+    override fun type(): CustomPacketPayload.Type<out CustomPacketPayload> = TYPE
+}
+
 /** Undo the player's last bead-tool operation. */
 data class UndoRequest(val noop: Boolean = false) : CustomPacketPayload {
     companion object {

@@ -1,17 +1,21 @@
 package com.pixelbead.beadmode
 
 /**
- * Pure 2D grid geometry for the bead tools. No Minecraft types on purpose: the tool logic
- * runs on `(u, v)` coordinates of the plane the player is facing, which keeps this file
- * unit-testable on a plain JVM (see ShapeMathTest) and keeps each tool handler tiny.
+ * Pure grid geometry for the bead tools. No Minecraft types on purpose: shapes are built from
+ * plain integer coordinates, which keeps this file unit-testable on a plain JVM (ShapeMathTest)
+ * and keeps the tool handlers tiny.
  *
- * A plane is picked by the face normal: X -> (y, z), Y -> (x, z), Z -> (x, y). The caller
- * converts back to world positions, so the same math works on walls, floors and ceilings.
+ * Two flavours are used:
+ *  - [line] works on the 2D plane of a block face and drives the drag-stroke interpolation;
+ *  - [line3] / [plane3] work in 3D and drive the fast mode, where the player marks two beads and
+ *    the shape between them is filled or erased (diagonals included).
  */
 object ShapeMath {
     data class Cell(val u: Int, val v: Int)
 
-    /** Bresenham line from [from] to [to]; both ends included, no duplicates. */
+    data class Cell3(val x: Int, val y: Int, val z: Int)
+
+    /** Bresenham line from [from] to [to] on a 2D plane; both ends included. */
     fun line(from: Cell, to: Cell): List<Cell> {
         var x = from.u
         var y = from.v
@@ -37,26 +41,47 @@ object ShapeMath {
         return out
     }
 
-    /** Inclusive rectangle spanned by two opposite corners, row-major from the low corner. */
-    fun rect(a: Cell, b: Cell): List<Cell> {
-        val u0 = minOf(a.u, b.u)
-        val u1 = maxOf(a.u, b.u)
-        val v0 = minOf(a.v, b.v)
-        val v1 = maxOf(a.v, b.v)
-        val out = ArrayList<Cell>((u1 - u0 + 1) * (v1 - v0 + 1))
-        for (v in v0..v1) {
-            for (u in u0..u1) out += Cell(u, v)
+    /**
+     * 3D line between two cells (diagonals included), interpolated along the longest axis.
+     * Always returns `max(|dx|, |dy|, |dz|) + 1` cells, each one step away from the previous.
+     */
+    fun line3(from: Cell3, to: Cell3): List<Cell3> {
+        val steps = maxOf(
+            kotlin.math.abs(to.x - from.x),
+            kotlin.math.abs(to.y - from.y),
+            kotlin.math.abs(to.z - from.z),
+        )
+        if (steps == 0) return listOf(from)
+        val out = ArrayList<Cell3>(steps + 1)
+        for (i in 0..steps) {
+            out += Cell3(
+                from.x + Math.round((to.x - from.x).toDouble() * i / steps).toInt(),
+                from.y + Math.round((to.y - from.y).toDouble() * i / steps).toInt(),
+                from.z + Math.round((to.z - from.z).toDouble() * i / steps).toInt(),
+            )
         }
         return out
     }
 
-    /** Square of [radius] around [center] in the same plane; `radius = 1` is a 3x3. */
-    fun square(center: Cell, radius: Int): List<Cell> {
-        val r = radius.coerceAtLeast(0)
-        if (r == 0) return listOf(center)
-        val out = ArrayList<Cell>((2 * r + 1) * (2 * r + 1))
-        for (v in center.v - r..center.v + r) {
-            for (u in center.u - r..center.u + r) out += Cell(u, v)
+    /**
+     * Axis-aligned rectangle spanned by two corners: the points must differ in at most two axes.
+     * Returns null when they differ in all three (that is a 3D diagonal, not a plane).
+     * Degenerate cases collapse naturally: one differing axis yields a line, zero a single cell.
+     */
+    fun plane3(a: Cell3, b: Cell3): List<Cell3>? {
+        val varying = (if (a.x != b.x) 1 else 0) + (if (a.y != b.y) 1 else 0) + (if (a.z != b.z) 1 else 0)
+        if (varying > 2) return null
+        val x0 = minOf(a.x, b.x)
+        val x1 = maxOf(a.x, b.x)
+        val y0 = minOf(a.y, b.y)
+        val y1 = maxOf(a.y, b.y)
+        val z0 = minOf(a.z, b.z)
+        val z1 = maxOf(a.z, b.z)
+        val out = ArrayList<Cell3>((x1 - x0 + 1) * (y1 - y0 + 1) * (z1 - z0 + 1))
+        for (z in z0..z1) {
+            for (y in y0..y1) {
+                for (x in x0..x1) out += Cell3(x, y, z)
+            }
         }
         return out
     }

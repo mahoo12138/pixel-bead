@@ -479,7 +479,7 @@ OpenGL 3.3 NVIDIA 610.88），mod 列表含 Pixel Bead 0.1.0，输出
   占位；`runClient` 实测首次进入存档后聊天栏出现两条欢迎语，重进不再重复。
 
 
-### 拼豆工具键（2026-11-15，用户要求「提高拼豆效率」）
+### 拼豆工具键（2026-11-15，已被下方「工具键重构」取代，仅留档）
 社区方案对照后落成五条，全部只在拼豆模式内生效，全部受 `tool.enabled` 总开关约束：
 
 | 手势 | 行为 |
@@ -515,8 +515,33 @@ OpenGL 3.3 NVIDIA 610.88），mod 列表含 Pixel Bead 0.1.0，输出
   可替换就以目标格本身作为命中方块；并在 `useOn` 之后断言 `targetPos` 真的变成拼豆，
   否则按 `blocked` 处理（不会白扣一颗豆）。
 
+### 工具键重构：四模式两点成形（2026-11-15 下午，用户重新设计）
+按住 `~` 进入**快速模式**，`↑`/`↓` 在四种模式间循环（默认线性放置），HUD 实时显示
+`快速模式：<模式>（↑↓ 切换）`：
+
+| 模式 | 手势（按住 `~` + 右键两次） | 结果 |
+|---|---|---|
+| 线性放置 | 第一下放一颗并记下起点，第二下闭合形状 | 两点之间的三维斜线，全部填成当前色 |
+| 线性消除 | 两下只标记，不放东西 | 同一条斜线，全部清掉 |
+| 平面放置 | 同上 | 两点张成的轴对齐矩形；三点轴都不同时提示「两点不在同一平面上」 |
+| 平面消除 | 同上 | 同一个矩形，全部清掉 |
+
+- **几何**：`ShapeMath.line3`（三轴插值，必得 `max(|dx|,|dy|,|dz|)+1` 格）与 `ShapeMath.plane3`
+  （≤2 轴不同才有解，1 轴退化成线、0 轴退化成点、3 轴返回 null）。全部纯 Kotlin，`ShapeMathTest` 6 项。
+- **权限**：只有创造模式可用（客户端按住 `~` 也只在创造时发 `held=true`，生存按下弹一次
+  「生存模式暂不支持快速模式」）。放置只产出拼豆方块；消除走 `destroyBlock`，可以拆任意方块，
+  领地保护照旧能拦。
+- **撤销**：每次成形记一条 undo（逐格旧状态），`Z` 还原，包括被消掉的非拼豆方块。
+- **协议**：新增 `SetToolMode(int)`；`ToolKey(boolean)` 语义不变。两点仍来自真实 use-on 事件，
+  不存在坐标包。
+- **删掉**：旧的 `~`+右键锚点矩形、`~`+左键 3×3 拆除、`tool.break_radius`、`tool.cooldown_ms`、
+  `anchor`/`broken` 文案；`ToolSessions` 里的 `anchor*`/`lastToolAt` 换成 `mode`/`mark*`。
+- **验证**：`./gradlew build` → 28 项测试全过。实机用「登录即跑」的临时自检（跑完已删）得到
+  `linePlace=5/5 planePlace=9/9 lineErase=0 planeErase=0 undoPlaneErase=9 undoLineErase=5`；
+  客户端侧截图确认 HUD 文案随 `↓` 从「线性放置」→「线性消除」→「平面放置」切换。
+
 **最终回归**：`./gradlew build` → `BUILD SUCCESSFUL`，
-`PaletteTest 7 + WorkbenchLogicTest 8 + ResourceSchemaTest 7 = 22` 项全通过，
+`PaletteTest 7 + WorkbenchLogicTest 8 + ResourceSchemaTest 7 + ShapeMathTest 6 = 28` 项全通过，
 产物 `build/libs/pixel-bead-0.1.0.jar`。
 
 仍待进游戏人工验证（自动化冒烟无法替代）：颜色/tint 一致性、HUD/选择器布局、

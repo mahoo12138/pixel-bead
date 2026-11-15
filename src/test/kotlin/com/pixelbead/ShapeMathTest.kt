@@ -2,13 +2,15 @@ package com.pixelbead
 
 import com.pixelbead.beadmode.ShapeMath
 import com.pixelbead.beadmode.ShapeMath.Cell
+import com.pixelbead.beadmode.ShapeMath.Cell3
 import org.junit.jupiter.api.Assertions.assertEquals
+import org.junit.jupiter.api.Assertions.assertNull
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
 
 /**
- * Plain-JVM tests for the bead-tool geometry. ShapeMath deliberately has no Minecraft types,
- * so the two-click rectangle and the stroke interpolation can be verified without a game.
+ * Plain-JVM tests for the bead-tool geometry. ShapeMath deliberately has no Minecraft types, so
+ * the two-point fast-mode shapes can be verified without a game.
  */
 class ShapeMathTest {
     @Test
@@ -25,37 +27,47 @@ class ShapeMathTest {
     }
 
     @Test
-    fun lineAlongOneAxisHasNoDuplicates() {
-        assertEquals(
-            listOf(Cell(3, 7), Cell(3, 8), Cell(3, 9)),
-            ShapeMath.line(Cell(3, 7), Cell(3, 9)),
-        )
-        assertEquals(listOf(Cell(5, 1)), ShapeMath.line(Cell(5, 1), Cell(5, 1)))
+    fun line3HitsBothEndsAndStepsOneBlockAtATime() {
+        val cells = ShapeMath.line3(Cell3(0, 0, 0), Cell3(4, 2, 0))
+        assertEquals(Cell3(0, 0, 0), cells.first())
+        assertEquals(Cell3(4, 2, 0), cells.last())
+        assertEquals(5, cells.size, "longest axis is 4, so 5 cells")
+        for (i in 1 until cells.size) {
+            val d = cells[i]
+            val p = cells[i - 1]
+            val step = maxOf(
+                kotlin.math.abs(d.x - p.x),
+                kotlin.math.abs(d.y - p.y),
+                kotlin.math.abs(d.z - p.z),
+            )
+            assertEquals(1, step, "diagonal steps must stay connected: $p -> $d")
+        }
     }
 
     @Test
-    fun rectIsInclusiveAndRowMajor() {
-        val cells = ShapeMath.rect(Cell(2, 5), Cell(0, 3))
+    fun line3HandlesAFullThreeAxisDiagonal() {
+        val cells = ShapeMath.line3(Cell3(0, 0, 0), Cell3(3, 3, 3))
+        assertEquals(4, cells.size)
+        assertEquals(Cell3(3, 3, 3), cells.last())
+        assertEquals(listOf(Cell3(0, 0, 0), Cell3(1, 1, 1), Cell3(2, 2, 2), Cell3(3, 3, 3)), cells)
+    }
+
+    @Test
+    fun plane3SpansTheRectangleBetweenTwoCorners() {
+        val cells = ShapeMath.plane3(Cell3(2, 5, 7), Cell3(0, 3, 7))!!
         assertEquals(9, cells.size, "3x3 rectangle")
-        // Corners are normalised: row-major from the low corner.
-        assertEquals(Cell(0, 3), cells.first())
-        assertEquals(Cell(2, 5), cells.last())
-        assertEquals(listOf(Cell(0, 3), Cell(1, 3), Cell(2, 3)), cells.take(3))
+        assertTrue(cells.contains(Cell3(0, 3, 7)) && cells.contains(Cell3(2, 5, 7)))
+        assertTrue(cells.all { it.z == 7 }, "every cell stays on the same plane")
     }
 
     @Test
-    fun singleCellRectAndLineAgree() {
-        assertEquals(listOf(Cell(4, 4)), ShapeMath.rect(Cell(4, 4), Cell(4, 4)))
-        assertEquals(listOf(Cell(4, 4)), ShapeMath.line(Cell(4, 4), Cell(4, 4)))
+    fun plane3DegeneratesToLineOrPoint() {
+        assertEquals(3, ShapeMath.plane3(Cell3(0, 0, 0), Cell3(2, 0, 0))?.size, "one axis -> line")
+        assertEquals(listOf(Cell3(4, 4, 4)), ShapeMath.plane3(Cell3(4, 4, 4), Cell3(4, 4, 4)))
     }
 
     @Test
-    fun squareGrowsWithRadiusAndKeepsTheCentre() {
-        val r1 = ShapeMath.square(Cell(10, 10), 1)
-        assertEquals(9, r1.size, "radius 1 = 3x3")
-        assertTrue(r1.contains(Cell(10, 10)))
-        assertTrue(r1.contains(Cell(9, 9)) && r1.contains(Cell(11, 11)))
-        assertEquals(1, ShapeMath.square(Cell(0, 0), 0).size, "radius 0 = single cell")
-        assertEquals(49, ShapeMath.square(Cell(0, 0), 3).size, "radius 3 = 7x7")
+    fun plane3RefusesAThreeAxisDiagonal() {
+        assertNull(ShapeMath.plane3(Cell3(0, 0, 0), Cell3(1, 2, 3)), "no single plane contains both")
     }
 }

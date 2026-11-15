@@ -3,8 +3,11 @@ package com.pixelbead.client.key
 import com.pixelbead.PixelBead
 import com.pixelbead.beadmode.BeadModeManager
 import com.pixelbead.beadmode.BeadModeState
+import com.pixelbead.client.ToolClientState
 import com.pixelbead.client.gui.ColorPickerScreen
+import com.pixelbead.client.hud.BeadHudLayer
 import com.pixelbead.network.SelectSlot
+import com.pixelbead.network.SetToolMode
 import com.pixelbead.network.ToggleModeRequest
 import com.pixelbead.network.ToolKey
 import com.pixelbead.network.UndoRequest
@@ -20,14 +23,14 @@ import net.neoforged.neoforge.client.network.ClientPacketDistributor
 
 /**
  * Client input: mode/picker keys, virtual 18-slot hotbar (2 rows x 9) decoupled from the
- * real inventory, the tool modifier and undo. 1-9 select the first row, Shift+1-9 the second,
- * scroll cycles all 18.
+ * real inventory, the fast-mode modifier with its arrow-key cycle, and undo.
+ * 1-9 select the first row, Shift+1-9 the second, scroll cycles all 18.
  * InputEvent.Key is not cancellable in 26.3, so the real selected slot is forced back each
  * tick while in mode (design §7.1). Scroll + pick-block are cancellable.
  *
- * The tool key is a *held* modifier, so it is sampled every tick and only sent when the state
- * changes (one tiny boolean packet per press/release). Presses inside a screen are ignored:
- * typing `~` in chat must not arm the tools.
+ * The tool key is a *held* modifier, sampled every tick and sent only on change (one tiny
+ * boolean packet per press/release). Presses inside a screen are ignored: typing `~` in chat
+ * must not arm the tools. Fast mode is creative-only for now, so survival never sends `held`.
  *
  * Verified against decompiled 26.3 source: Minecraft.gui.screen()/setScreen(),
  * ClientPacketDistributor.sendToServer(), InputEvent.Key.getKey() (SDL scancode) +
@@ -38,12 +41,14 @@ object BeadKeyHandler {
     private var savedRealSlot = 0
     private var wasActive = false
     private var toolSent = false
+    private var warnedSurvival = false
 
     @SubscribeEvent
     fun onClientTick(e: ClientTickEvent.Post) {
         val mc = Minecraft.getInstance()
         val player = mc.player ?: run {
             toolSent = false
+            warnedSurvival = false
             return
         }
         while (BeadKeyMappings.TOGGLE_MODE.consumeClick()) ClientPacketDistributor.sendToServer(ToggleModeRequest())
@@ -57,7 +62,20 @@ object BeadKeyHandler {
             if (active && mc.gui.screen() == null) ClientPacketDistributor.sendToServer(UndoRequest())
         }
 
-        val held = active && mc.gui.screen() == null && BeadKeyMappings.TOOL.isDown
+        val inWorld = mc.gui.screen() == null
+        val fastAllowed = active && inWorld && player.isCreative
+        val held = fastAllowed && BeadKeyMappings.TOOL.isDown
+
+        // Survival gets a one-shot hint instead of a silently dead modifier.
+        if (active && inWorld && !player.isCreative && BeadKeyMappings.TOOL.isDown) {
+            if (!warnedSurvival) {
+                warnedSurvival = true
+                BeadHudLayer.showToast("creative_only")
+            }
+        } else if (!BeadKeyMappings.TOOL.isDown) {
+            warnedSurvival = false
+        }
+
         if (held != toolSent) {
             toolSent = held
             ClientPacketDistributor.sendToServer(ToolKey(held))
@@ -71,6 +89,7 @@ object BeadKeyHandler {
     @SubscribeEvent
     fun onLoggedOut(e: ClientPlayerNetworkEvent.LoggingOut) {
         toolSent = false
+        warnedSurvival = false
     }
 
     @SubscribeEvent
@@ -79,6 +98,22 @@ object BeadKeyHandler {
         val player = mc.player ?: return
         if (mc.gui.screen() != null || !BeadModeManager.state(player).active) return
         if (e.action != InputConstants.PRESS) return
+
+        // While the tool key is held the arrows cycle the fast mode (creative only, matching the
+        // server-side gate) instead of doing anything else.
+        if (player.isCreative && BeadKeyMappings.TOOL.isDown) {
+            val step = when (e.key) {
+                InputConstants.KEY_DOWN -> 1
+                InputConstants.KEY_UP -> -1
+                else -> 0
+            }
+            if (step != 0) {
+                ToolClientState.shift(step)
+                ClientPacketDistributor.sendToServer(SetToolMode(ToolClientState.mode.ordinal))
+                return
+            }
+        }
+
         // getKey() is the SDL scancode, matching InputConstants.KEY_1..KEY_9.
         val slot = when (e.key) {
             InputConstants.KEY_1 -> 0; InputConstants.KEY_2 -> 1; InputConstants.KEY_3 -> 2

@@ -3,6 +3,7 @@ package com.pixelbead.network
 import com.pixelbead.PixelBead
 import com.pixelbead.beadmode.AreaTools
 import com.pixelbead.beadmode.BeadModeManager
+import com.pixelbead.beadmode.ToolMode
 import com.pixelbead.beadmode.ToolSessions
 import net.minecraft.server.level.ServerPlayer
 import net.neoforged.bus.api.SubscribeEvent
@@ -41,6 +42,14 @@ object BeadNetwork {
             ctx.enqueueWork {
                 (ctx.player() as? ServerPlayer)?.let {
                     ToolSessions.of(it).held = payload.held && !it.isSpectator
+                }
+            }
+        }
+        reg.playToServer(SetToolMode.TYPE, SetToolMode.STREAM_CODEC) { payload, ctx ->
+            ctx.enqueueWork {
+                (ctx.player() as? ServerPlayer)?.let {
+                    ToolSessions.of(it).mode = ToolMode.byId(payload.mode)
+                    ToolSessions.of(it).clearMark()
                 }
             }
         }

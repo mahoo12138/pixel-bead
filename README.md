@@ -175,33 +175,45 @@ The "already greeted" flag is its own attachment (`BeadModeAttachments.WELCOMED`
 deliberately not copied on death — otherwise dying and relogging would replay the greeting.
 It is skipped (and not consumed) when the server config disables the feature.
 
-## Bead tools (2026-11-15)
+## Bead tools (2026-11-15, redesigned)
 
-The efficiency layer on top of bead mode. Everything here is server-authoritative, sits behind
-`tool.enabled`, and only ever moves **bead** blocks in bulk:
+Two independent layers, both server-authoritative and both behind `tool.enabled`.
+
+**Always on (bead mode):**
 
 | Gesture | What happens |
 |---|---|
-| Hold RMB and sweep | **Stroke**: the cells the cursor skipped are filled with a Bresenham line, so dragging fast no longer leaves gaps. Bridged only within one face plane and `tool.max_stroke_gap` blocks; a pause (500 ms) or a face change breaks the stroke |
+| Hold RMB and sweep | **Stroke**: the cells the cursor skipped are filled with a line, so dragging fast no longer leaves gaps. Bridged only within one face plane and `tool.max_stroke_gap` blocks; a pause (500 ms) or a face change breaks the stroke |
 | Plain LMB on a bead block | **Eraser**: that bead disappears instantly, and the sweep is interpolated exactly like the brush |
-| `~` + RMB | **Two-click fill**: the first click stores an anchor, the second fills the axis-aligned rectangle between the corners on that plane — hold sneak for a single line instead. Capped at `tool.max_area` (512) |
-| `~` + LMB | **Area break**: clears a `(2 * tool.break_radius + 1)²` square of bead blocks in the face plane |
-| `Z` | **Undo** the last stroke / fill / break (`tool.undo_steps`, default 8) |
+| `Z` | **Undo** the last stroke / fast-mode operation (`tool.undo_steps`, default 8) |
+
+**Fast mode — hold `~` (creative only, for now):** a shape is built from **two points**. The first
+click places a bead (place modes) and marks the point, the second click closes the shape and applies
+it to everything in between. `↑` / `↓` cycle the four modes while the key is held; the HUD shows the
+current one.
+
+| Mode | Shape |
+|---|---|
+| 线性放置 / line place | one diagonal line of beads between the two points |
+| 线性消除 / line erase | the same line, removed |
+| 平面放置 / plane place | the rectangle spanned by the two points (they must share one plane, otherwise nothing happens and the HUD says so) |
+| 平面消除 / plane erase | the same rectangle, removed |
+
+Placement only ever creates bead blocks; erasing removes **any** block. Shapes are capped by
+`tool.max_area` (512). Survival is intentionally unsupported: holding `~` there only prints a hint.
 
 Why it is built like this:
 
-- **No coordinate payloads.** The anchor and the fill are two ordinary right clicks, so the server
-  derives both corners from events it already receives. Every filled cell runs through
-  `BeadPlacement.placeAt` → `ItemStack.useOn` → `EntityPlaceEvent`, so claim mods still veto cell by
-  cell. The only new client→server payload is a boolean for the tool key (the same trick VeinMiner
-  uses), plus a unit payload for undo.
-- **Bulk removal only touches bead blocks** — a stray tool click can never eat a build. Every break
-  goes through `ServerPlayerGameMode.destroyBlock`, so `BreakEvent` still fires and drops still work.
-- **Undo moves material both ways**: undoing a fill hands the beads back, undoing a break charges
-  them in again (and is refused while the drop is still on the ground). `break → undo → break`
-  therefore cannot duplicate beads.
-- **Nothing is persisted.** Tool/key/anchor/stroke/undo state lives in `ToolSessions`, a per-player
-  map that is dropped on logout, death, teleport and dimension change, so a stale "tool key held"
+- **No coordinate payloads.** Both marks come from ordinary right clicks, so the server derives
+  every cell from events it already receives. Each filled cell still runs through
+  `BeadPlacement.placeAt` → `ItemStack.useOn` → `EntityPlaceEvent`, so claim mods keep vetoing cell
+  by cell. The payloads are a boolean (tool key held) and one small int (selected mode).
+- **Erasing goes through `ServerPlayerGameMode.destroyBlock`**, so `BreakEvent` still fires and claim
+  mods can refuse it — the bulk path is not a back door around protection.
+- **Everything is undoable**, including erasing arbitrary blocks: the previous block state of each
+  cell is stored, and undo puts it back.
+- **Nothing is persisted.** Tool/key/mode/mark/stroke/undo state lives in `ToolSessions`, a
+  per-player map dropped on logout, death, teleport and dimension change, so a stale "tool key held"
   flag can never survive a crash.
 
 ## Color data license
