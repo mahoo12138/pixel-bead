@@ -46,7 +46,10 @@ object AreaTools {
         }
         val session = ToolSessions.of(player)
         val mode = session.mode
-        val target = clickedPos.relative(face)
+        // Place modes work on the cell *in front of* the clicked face; erase modes work on the
+        // block the player is actually looking at (the bead itself), which is the only thing that
+        // makes sense to remove — the cell in front of a bead is empty air.
+        val target = if (mode.erase) clickedPos else clickedPos.relative(face)
         val dimension = player.level().dimension()
         val mark = session.mark
         val stale = mark == null ||
